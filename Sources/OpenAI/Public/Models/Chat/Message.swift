@@ -80,7 +80,7 @@ public struct Message: Codable, Equatable {
         self.content = content
         self.name = name
         self.functionCall = nil
-        self.toolCalls = []
+        self.toolCalls = nil
     }
     
     public init(role: Role, content: StringOrCodable<[ChatContent]>? = nil, name: String? = nil, functionCall: ChatFunctionCall?) {
@@ -88,7 +88,7 @@ public struct Message: Codable, Equatable {
         self.content = content
         self.name = name
         self.functionCall = functionCall
-        self.toolCalls = []
+        self.toolCalls = nil
     }
     
     public init(

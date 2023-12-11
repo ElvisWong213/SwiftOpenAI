@@ -60,7 +60,7 @@ public struct ChatContent: Codable, Equatable {
             break
         case .imageUrl:
             var nested = dynamicContainer.nestedContainer(keyedBy: ChatImageUrl.CodingKeys.self, forKey: .init(stringValue: "image_url"))
-            try nested.encode(value, forKey: .url)
+            try nested.encode("data:image/jpeg;base64," + value, forKey: .url)
             break
         }
     }
