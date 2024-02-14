@@ -164,9 +164,9 @@ class OpenAITests: XCTestCase {
     }
 
     func testChatsFunction() async throws {
-        let query = ChatQuery(model: .gpt3_5Turbo_1106, messages: [
-            .init(role: .system, content: "You are Weather-GPT. You know everything about the weather.", toolCalls: nil),
-            .init(role: .user, content: "What's the weather like in Boston?", toolCalls: nil),
+        let query = ChatQuery(model: .gpt3_5Turbo_0125, messages: [
+            .init(role: .system, content: "You are Weather-GPT. You know everything about the weather."),
+            .init(role: .user, content: "What's the weather like in Boston?"),
         ], functions: [
             .init(name: "get_current_weather", description: "Get the current weather in a given location", parameters: .init(type: .object, properties: [
                 "location": .init(type: .string, description: "The city and state, e.g. San Francisco, CA"),
@@ -302,6 +302,39 @@ class OpenAITests: XCTestCase {
         self.stub(error: inError)
         
         let apiError: APIError = try await XCTExpectError { try await openAI.moderations(query: query) }
+        XCTAssertEqual(inError, apiError)
+    }
+    
+    func testAudioSpeechDoesNotNormalize() async throws {
+        let query = AudioSpeechQuery(model: .tts_1, input: "Hello, world!", voice: .alloy, responseFormat: .mp3, speed: 2.0)
+
+        XCTAssertEqual(query.speed, "\(2.0)")
+    }
+
+    func testAudioSpeechNormalizeNil() async throws {
+        let query = AudioSpeechQuery(model: .tts_1, input: "Hello, world!", voice: .alloy, responseFormat: .mp3, speed: nil)
+
+        XCTAssertEqual(query.speed, "\(1.0)")
+    }
+
+    func testAudioSpeechNormalizeLow() async throws {
+        let query = AudioSpeechQuery(model: .tts_1, input: "Hello, world!", voice: .alloy, responseFormat: .mp3, speed: 0.0)
+
+        XCTAssertEqual(query.speed, "\(0.25)")
+    }
+
+    func testAudioSpeechNormalizeHigh() async throws {
+        let query = AudioSpeechQuery(model: .tts_1, input: "Hello, world!", voice: .alloy, responseFormat: .mp3, speed: 10.0)
+
+        XCTAssertEqual(query.speed, "\(4.0)")
+    }
+
+    func testAudioSpeechError() async throws {
+        let query = AudioSpeechQuery(model: .tts_1, input: "Hello, world!", voice: .alloy, responseFormat: .mp3, speed: 1.0)
+        let inError = APIError(message: "foo", type: "bar", param: "baz", code: "100")
+        self.stub(error: inError)
+        
+        let apiError: APIError = try await XCTExpectError { try await openAI.audioCreateSpeech(query: query) }
         XCTAssertEqual(inError, apiError)
     }
     

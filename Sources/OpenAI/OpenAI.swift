@@ -35,7 +35,7 @@ final public class OpenAI: OpenAIProtocol {
     }
     
     private let session: URLSessionProtocol
-    private var streamingSessions: [NSObject] = []
+    private var streamingSessions = ArrayWithThreadSafety<NSObject>()
     
     public let configuration: Configuration
 
@@ -111,38 +111,32 @@ final public class OpenAI: OpenAIProtocol {
     public func audioTranslations(query: AudioTranslationQuery, completion: @escaping (Result<AudioTranslationResult, Error>) -> Void) {
         performRequest(request: MultipartFormDataRequest<AudioTranslationResult>(body: query, url: buildURL(path: .audioTranslations)), completion: completion)
     }
+    
+    public func audioCreateSpeech(query: AudioSpeechQuery, completion: @escaping (Result<AudioSpeechResult, Error>) -> Void) {
+        performSpeechRequest(request: JSONRequest<AudioSpeechResult>(body: query, url: buildURL(path: .audioSpeech)), completion: completion)
+    }
+    
 }
 
 extension OpenAI {
 
     func performRequest<ResultType: Codable>(request: any URLRequestBuildable, completion: @escaping (Result<ResultType, Error>) -> Void) {
         do {
-            let request = try request.build(token: configuration.token, organizationIdentifier: configuration.organizationIdentifier, timeoutInterval: configuration.timeoutInterval)
+            let request = try request.build(token: configuration.token, 
+                                            organizationIdentifier: configuration.organizationIdentifier,
+                                            timeoutInterval: configuration.timeoutInterval)
             let task = session.dataTask(with: request) { data, _, error in
                 if let error = error {
-                    completion(.failure(error))
-                    return
+                    return completion(.failure(error))
                 }
                 guard let data = data else {
-                    completion(.failure(OpenAIError.emptyData))
-                    return
+                    return completion(.failure(OpenAIError.emptyData))
                 }
-
-                var apiError: Error? = nil
+                let decoder = JSONDecoder()
                 do {
-                    let decoded = try JSONDecoder().decode(ResultType.self, from: data)
-                    completion(.success(decoded))
+                    completion(.success(try decoder.decode(ResultType.self, from: data)))
                 } catch {
-                    apiError = error
-                }
-
-                if let apiError = apiError {
-                    do {
-                        let decoded = try JSONDecoder().decode(APIErrorResponse.self, from: data)
-                        completion(.failure(decoded))
-                    } catch {
-                        completion(.failure(apiError))
-                    }
+                    completion(.failure((try? decoder.decode(APIErrorResponse.self, from: data)) ?? error))
                 }
             }
             task.resume()
@@ -153,7 +147,9 @@ extension OpenAI {
     
     func performSteamingRequest<ResultType: Codable>(request: any URLRequestBuildable, onResult: @escaping (Result<ResultType, Error>) -> Void, completion: ((Error?) -> Void)?) {
         do {
-            let request = try request.build(token: configuration.token, organizationIdentifier: configuration.organizationIdentifier, timeoutInterval: configuration.timeoutInterval)
+            let request = try request.build(token: configuration.token, 
+                                            organizationIdentifier: configuration.organizationIdentifier,
+                                            timeoutInterval: configuration.timeoutInterval)
             let session = StreamingSession<ResultType>(urlRequest: request)
             session.onReceiveContent = {_, object in
                 onResult(.success(object))
@@ -169,6 +165,28 @@ extension OpenAI {
             streamingSessions.append(session)
         } catch {
             completion?(error)
+        }
+    }
+    
+    func performSpeechRequest(request: any URLRequestBuildable, completion: @escaping (Result<AudioSpeechResult, Error>) -> Void) {
+        do {
+            let request = try request.build(token: configuration.token, 
+                                            organizationIdentifier: configuration.organizationIdentifier,
+                                            timeoutInterval: configuration.timeoutInterval)
+            
+            let task = session.dataTask(with: request) { data, _, error in
+                if let error = error {
+                    return completion(.failure(error))
+                }
+                guard let data = data else {
+                    return completion(.failure(OpenAIError.emptyData))
+                }
+                
+                completion(.success(AudioSpeechResult(audioData: data)))
+            }
+            task.resume()
+        } catch {
+            completion(.failure(error))
         }
     }
 }
@@ -194,6 +212,7 @@ extension APIPath {
     static let models = "/v1/models"
     static let moderations = "/v1/moderations"
     
+    static let audioSpeech = "/v1/audio/speech"
     static let audioTranscriptions = "/v1/audio/transcriptions"
     static let audioTranslations = "/v1/audio/translations"
     
